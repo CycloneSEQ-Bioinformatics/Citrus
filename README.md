@@ -4,7 +4,7 @@ This tool is designed to efficiently split barcodes from sequencing data. It str
 ## No Installation Required  
 **Ready to Use After Extraction**  
 
-This software is designed for ease of use without the need for a complicated installation process. Simply extract the contents of the software package to your preferred location on your computer, and it's ready to go.  
+This software is designed for ease of use without the need for a complicated installation process. Simply extract the contents of the software package to your preferred location on your system, and it's ready to go.  
 
 **How to Start:**  
 1. Download the `.zip` file.
