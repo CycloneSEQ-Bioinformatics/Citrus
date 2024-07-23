@@ -1,5 +1,5 @@
 # Citrus
-This tool is designed to efficiently split barcodes and from sequencing data. It streamlines the preprocessing of genomic data by separating barcodes, enhancing the accuracy of downstream analyses.
+This tool is designed to efficiently split barcodes from sequencing data. It streamlines the preprocessing of genomic data by separating barcodes, enhancing the accuracy of downstream analyses.
 
 ## Example Usage
 ### Single-end barcode splitting  
