@@ -1,13 +1,23 @@
 # Citrus
 This tool is designed to efficiently split barcodes from sequencing data. It streamlines the preprocessing of genomic data by separating barcodes, enhancing the accuracy of downstream analyses.
 
+## No Installation Required  
+**Ready to Use After Extraction**  
+
+This software is designed for ease of use without the need for a complicated installation process. Simply extract the contents of the software package to your preferred location on your computer, and it's ready to go.  
+
+**How to Start:**  
+1. Download the `.zip` file.
+2. Extract the contents to a desired location.  
+3. Run the `citrus` to start the software.  
+
 ## Example Usage
-### Single-end barcode splitting  
+**Single-end barcode splitting**  
 `citrus -m 1 -f sample.fq.gz -b barcodes.txt -o output_dir -n sample -e 6 -s 150 -t threads`  
-### Paired-end barcode splitting  
+**Paired-end barcode splitting**  
 `citrus -m 2 -f sample.fq.gz -b barcodes.txt -o output_dir -n sample -e 6,6 -s 150,50 -t threads`
 
-## Command-line arguments
+## Command-line Arguments
 ```
 Usage: citrus [OPTIONS] --mode <mode> --fastq <fastq file> --barcode <barcode file> --outdir <output dir> --sample <sample>
 
@@ -33,5 +43,14 @@ Options:
   -V, --version                  Print version
 ```
 
-  ## Authors
-  夏小双 Xiaoshuang Xia (xiaxiaoshuang@genomics.cn)
+## Authors
+夏小双 Xiaoshuang Xia (xiaxiaoshuang@genomics.cn)
+
+## License and Usage Restrictions
+**Research Use Only**  
+
+This software is provided strictly for individual research purposes. Commercial use is strictly prohibited. This means:  
+**Allowed:** Personal academic research, personal learning, and non-commercial experimentation.  
+**Not Allowed:** Any form of commercial application, distribution, or use that generates revenue directly or indirectly. This includes, but is not limited to, integration into commercial products, offering this software as a service, or using it for commercial gain.  
+
+For commercial licensing or permissions, please contact us.
