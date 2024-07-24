@@ -1,3 +1,4 @@
+![image](https://github.com/user-attachments/assets/47158133-d60d-4eca-8f8c-aa34eed11b94)
 # Citrus
 This tool is designed to efficiently split barcodes from sequencing data. It streamlines the preprocessing of genomic data by separating barcodes, enhancing the accuracy of downstream analyses.
 
