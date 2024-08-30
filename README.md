@@ -47,9 +47,7 @@ Options:
 ```
 
 ## Barcode File
-The barcode file must contain three tab-separated columns: `ID`, `5' barcode sequence`, and `3' barcode sequence`.  
-The `ID` can be the number of a barcode, or names like sample name, species name, or tissue name, etc.  
-Additionally, one `ID` can correspond to multiple pairs of barcode sequences.
+The barcode file must contain three tab-separated columns: `ID`, `5' barcode sequence`, and `3' barcode sequence`. The `ID` can be the number of a barcode, or names like sample name, species name, or tissue name, etc. Additionally, one `ID` can correspond to multiple pairs of barcode sequences.  
 As shown in the example, if the `ID` is `BC1`, the barcode file would be structured as follows:  
 <table><tr><td>BC1</td><td>ATCG</td><td>TCAG</td></tr></table>
 
