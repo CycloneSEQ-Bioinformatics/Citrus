@@ -51,9 +51,9 @@ As shown in the example, if the `ID` is `BC1`, the barcode file would be structu
 
 ## Versions
 This tool offers two versions:  
-**GNU version (recommended):** Faster and more memory-efficient. Requires a recent version(>=2.31) of glibc on your Linux system.  
+**GNU version (recommended):** Faster and more memory-efficient. Requires a recent version(>=2.35) of glibc on your Linux system.  
 **Musl version:** Highly portable and compatible with a wider range of Linux systems, including those with older glibc versions.  
-As shown in the diagram, sequencing data size is 4.66G, with 10 threads.  
+As shown in the diagram, sequencing data size is 4.66G, the number of barcodes is 24, and 10 threads were used.  
 ![9d0d6bc7154580c998284ee3de8468d](https://github.com/user-attachments/assets/6004304c-2ea0-4d88-97b6-98df846a8dee)
 
 ## Authors
