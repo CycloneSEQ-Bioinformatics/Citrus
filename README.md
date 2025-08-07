@@ -14,7 +14,7 @@ This software is designed for ease of use without the need for a complicated ins
 
 ## Example Usage  
 **Mode 1 barcode demultiplexing**  
-`citrus -m 1 -f sample.fq.gz -b barcodes.txt -o output_dir -n sample -e 0.2 -s 150 -t threads`  
+`citrus -m 1 -f sample.fq.gz -b barcodes.txt -o output_dir -n sample -e 0.2 -s 150,100 -t threads`  
 **Mode 2 barcode demultiplexing**  
 `citrus -m 2 -f sample.fq.gz -b barcodes.txt -o output_dir -n sample -e 0.2 -s 150,100 -t threads`
 
