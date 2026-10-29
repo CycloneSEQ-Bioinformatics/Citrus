@@ -277,9 +277,42 @@ Three TSV files, each with a header line and one row per read:
 These files are meant for visualisation and troubleshooting of individual reads.
 
 ## Performance
-As shown in the diagram, sequencing data size is 10.37G, average read length is 693.26bp, the number of barcodes is 24, and 10 threads were used.  
-**Note:** Memory usage increases with the average read length, and runtime increases with the number of barcodes.  
-<img width="1000" height="600" alt="memory_usage" src="https://github.com/user-attachments/assets/f0339535-9cbf-41c5-a429-d8890973f11a" />
+All figures below come from a benchmark on a single batch of **10 million reads**, demultiplexed with Citrus v3.4. Except where stated otherwise, the version, the barcode file and all parameters were identical across runs; only the input format or the thread count changed.
+
+### Input format: fastq vs modBAM
+The same reads were demultiplexed twice, once from a 17 GB fastq file (`--fastq`) and once from the equivalent 12 GB modBAM file (`--bam`), with 32 threads.
+
+| Input | Elapsed | Mean CPU | Peak memory |
+|---|---|---|---|
+| fastq (`-f`) | 425 s | 4.4 cores | 2.3 GB |
+| modBAM (`--bam`) | 333 s | 6.5 cores | 3.7 GB |
+
+![fastq vs modBAM input](images/perf_input_formats.png)
+
+modBAM input is roughly **20% to 30% faster** than fastq input, and the demultiplexed output is equivalent. The speed-up comes from higher parallelism, and the parallelism difference stems from how the input is decoded. The MM/ML tag realignment performed on the modBAM side has a negligible measured overhead and is not a performance bottleneck.
+
+### Thread-count scaling
+The same 10 million reads were demultiplexed with 4, 8, 16 and 32 threads.
+
+| Threads | fastq | modBAM |
+|---|---|---|
+| 4 | 990 s | 702 s |
+| 8 | 507 s | 378 s |
+| 16 | 411 s | 334 s |
+| 32 | 455 s | 330 s |
+
+![thread-count sweep](images/perf_thread_sweep.png)
+
+CPU utilization grows non-linearly with the number of threads requested. Beyond 16 threads it no longer improves effectively: the fastq run even gets slower (455 s vs 411 s at 16 threads), while the modBAM run only gains 4 s.
+
+### Memory usage over time
+Memory usage of the GNU build stays flat at about 3 GB for the whole run, while the statically linked musl build allocates and releases memory periodically, which is why its curve oscillates.
+
+![memory usage over time](images/memory_usage.png)
+
+In this run the sequencing data size is 10.37G, the average read length is 693.26bp, the number of barcodes is 24, and 10 threads were used.
+
+**Note:** Memory usage increases with the average read length, and runtime increases with the number of barcodes.
 
 ## Authors
 夏小双 Xiaoshuang Xia (xiaxiaoshuang@genomics.cn)
