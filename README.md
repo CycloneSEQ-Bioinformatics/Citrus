@@ -305,17 +305,11 @@ The same 10 million reads were demultiplexed with 4, 8, 16 and 32 threads.
 
 CPU utilization grows non-linearly with the number of threads requested. Beyond 16 threads it no longer improves effectively: the fastq run even gets slower (455 s vs 411 s at 16 threads), while the modBAM run only gains 4 s.
 
-### Memory usage over time
-Memory usage of the GNU build stays flat at about 3 GB for the whole run, while the statically linked musl build allocates and releases memory periodically, which is why its curve oscillates.
-
-![memory usage over time](images/memory_usage.png)
-
-In this run the sequencing data size is 10.37G, the average read length is 693.26bp, the number of barcodes is 24, and 10 threads were used.
-
-**Note:** Memory usage increases with the average read length, and runtime increases with the number of barcodes.
-
 ## Authors
-夏小双 Xiaoshuang Xia (xiaxiaoshuang@genomics.cn)
+
+Ming Lian 连明 (lianming@genomics.cn)
+
+Jiayuan Zhang 张嘉远 (zhangjiayuan@genomics.cn)
 
 ## License and Usage Restrictions
 **Research Use Only**  
