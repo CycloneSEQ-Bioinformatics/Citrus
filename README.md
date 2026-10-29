@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/47158133-d60d-4eca-8f8c-aa34eed11b94)
+![image](images/logo.png)
 # Citrus
 This tool is designed to efficiently demultiplex barcodes from sequencing data. It streamlines the preprocessing of genomic data by demultiplexing barcodes, enhancing the accuracy of downstream analyses.
 
@@ -74,7 +74,7 @@ The barcode file must contain two or three tab-separated columns: `ID`, `5' barc
 As shown in the example, if the `ID` is `BC1`, the barcode file would be structured as follows:  
 <table><tr><td>BC1</td><td>ATCG</td><td>TCAG</td></tr></table>
 
-![image](https://github.com/user-attachments/assets/89bc2b4f-f1e0-4725-8827-80d8e8a2623f)
+![image](images/barcode_demo.png)
 
 **Single-end barcodes** — one barcode per line; the same sequence is used for both ends:
 
