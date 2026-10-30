@@ -137,9 +137,9 @@ Use `-k` instead of `-b` to demultiplex with a built-in barcode kit:
 | `CycloneSEQ_96_Barcode_Library_Prep_Set` | `96_Ligation_Barcodes` | 96 |
 | `CycloneSEQ_Rapid_24_Barcode_Library_Prep_Set` | - | 24 |
 
-Each kit carries its own tuned parameter set that replaces the defaults in the argument table above when `-k` is used; parameters you set explicitly always take precedence. The three kits share the same parameter set:
+Each kit carries its own tuned parameter set, and these values are the **effective defaults** when `-k` is used; without `-k` (custom `-b` file), the standalone defaults in the argument table above apply. Parameters you set explicitly always take precedence over either. The three kits share the same parameter set:
 
-| Parameter | Kit value | Standalone default |
+| Parameter | Kit value (effective with `-k`) | Standalone default (effective with `-b`) |
 | :--- | :---: | :---: |
 | `--err` | `0.25,0.25` | `0.2,0.2` |
 | `--shift` | `150,100` | `150,100` |
@@ -149,7 +149,7 @@ Each kit carries its own tuned parameter set that replaces the defaults in the a
 | `--min_qual` | 7.0 | 7.0 |
 | `--trim_len` | 6 | 0 |
 
-So the only differences from the standalone defaults are a relaxed error threshold (`--err`) and a 6 bp trim for barcode recognition when 3' end sequencing is incomplete (`--trim_len`).
+The only differences between the two default sets are a relaxed error threshold (`--err`) and a 6 bp trim for barcode recognition when 3' end sequencing is incomplete (`--trim_len`). Note that `--help` always shows the standalone defaults; they are not the effective values under `-k`.
 
 ## Output
 ```
