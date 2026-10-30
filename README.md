@@ -48,8 +48,8 @@ citrus -m 2 -f sample.fq.gz -k CycloneSEQ_24_Barcode_Library_Prep_Set -o output_
 | `-q, --testseq` | Input a test sequence file | No | - |
 | `-o, --outdir` | Output directory | Yes | - |
 | `-n, --sample` | Sample name | Yes | - |
-| `-L, --min_len` | Sequences shorter than the minimum length will be directly classified as QC-failed | No | 0 |
-| `-Q, --min_qual` | Read quality lower than the minimum quality will be directly classified as QC-failed | No | 7.0 |
+| `-L, --min_len` | Sequences shorter than the minimum length are discarded while reading input: not written to any file and not counted in the statistics. Before v3.3.0 such reads were written to `{sample}.length_filtered.fq.gz` | No | 0 |
+| `-Q, --min_qual` | Reads whose quality computed from the base qualities (`-10·log10(mean(10^(-Q_i/10)))`, not the read-ID qscore) is lower than the minimum are discarded | No | 7.0 |
 | `-e, --err` | Threshold of Levenshtein Distance value (integer) or sequencing error rate (float value between 0 and 1). Use a comma to separate two numbers, when there are different thresholds for the 5' and 3' ends | No | 0.2,0.2 |
 | `-s, --shift` | Threshold of shift length for identifying barcode sequences. Use a comma to separate two numbers, when there are different thresholds for the 5' and 3' ends | No | 150,100 |
 | `-u, --trim_len` | Set trimmed length for barcode recognition when 3' end sequencing is incomplete | No | 0 |
@@ -166,8 +166,8 @@ The four files under `Discarded/` collect the reads that did not reach a barcode
 
 | File | Reads it contains |
 |---|---|
-| `{sample}.length_filtered.fq.gz` | shorter than `--min_len` |
-| `{sample}.qval_filtered.fq.gz` | mean quality lower than `--min_qual` |
+| `{sample}.length_filtered.fq.gz` | passes `--min_len` but is discarded for another length reason (shorter than the longest barcode, or no insert left after trimming); since v3.3.0 it no longer contains reads shorter than `--min_len` |
+| `{sample}.qval_filtered.fq.gz` | read quality computed from base qualities (average error probability converted back to Q, not the read-ID qscore) lower than `--min_qual` |
 | `{sample}.ld_filtered.fq.gz` | no barcode matched within the `--err` threshold |
 | `{sample}.chimeric.fq.gz` | reads detected as chimeric; this category is only detected when `-F` is used, and the file stays empty otherwise |
 
