@@ -43,11 +43,12 @@ citrus -m 2 -f sample.fq.gz -k CycloneSEQ_24_Barcode_Library_Prep_Set -o output_
 | `-m, --mode` | Set a mode to demultiplex barcodes. 1: demultiplex the 5' end barcode and conditionally demultiplex the 3' end barcode if identified; 2: demultiplex barcodes at both the 5' and 3' ends | Yes | - |
 | `-f, --fastq` | Input one or more fastq files, separated by spaces | Yes¹ | - |
 | `--bam` | Input one or more unmapped BAM files carrying MM/ML tags, separated by spaces | Yes¹ | - |
-| `-b, --barcode` | Input one or more barcode files. If there are both-ends barcodes in a read, please separate them with a tab in the input file. When both-ends barcodes complement each other in reverse, only the 5' end barcode is needed. For reads with two barcodes on one end, the barcode files should be comma-separated | Yes² | - |
 | `-k, --kits` | Use a predefined barcode kit. Mutually exclusive with `-b` | Yes² | - |
-| `-q, --testseq` | Input a test sequence file | No | - |
-| `-o, --outdir` | Output directory | Yes | - |
+| `-b, --barcode` | Input one or more barcode files. If there are both-ends barcodes in a read, please separate them with a tab in the input file. When both-ends barcodes complement each other in reverse, only the 5' end barcode is needed. For reads with two barcodes on one end, the barcode files should be comma-separated | Yes² | - |
 | `-n, --sample` | Sample name | Yes | - |
+| `-t, --thread` | Number of threads | No | 4 |
+| `-o, --outdir` | Output directory | Yes | - |
+| `-q, --testseq` | Input a test sequence file | No | - |
 | `-L, --min_len` | Sequences shorter than the minimum length are discarded while reading input: not written to any file and not counted in the statistics. Before v3.3.0 such reads were written to `{sample}.length_filtered.fq.gz` | No | 0 |
 | `-Q, --min_qual` | Reads whose quality computed from the base qualities (`-10·log10(mean(10^(-Q_i/10)))`, not the read-ID qscore) is lower than the minimum are discarded | No | 7.0 |
 | `-e, --err` | Threshold of Levenshtein Distance value (integer) or sequencing error rate (float value between 0 and 1). Use a comma to separate two numbers, when there are different thresholds for the 5' and 3' ends | No | 0.2,0.2 |
@@ -55,7 +56,6 @@ citrus -m 2 -f sample.fq.gz -k CycloneSEQ_24_Barcode_Library_Prep_Set -o output_
 | `-u, --trim_len` | Set trimmed length for barcode recognition when 3' end sequencing is incomplete | No | 0 |
 | `-c, --seed_size` | Seed size | No | 6 |
 | `-d, --step_size` | Step size | No | 1 |
-| `-t, --thread` | Number of threads | No | 4 |
 | `-r, --retain` | Retain barcode sequences on reads | No | - |
 | `-g, --degenerate` | Allow degenerate bases in barcodes and primers | No | - |
 | `-i, --intermediate` | Output intermediate results | No | - |
@@ -150,6 +150,24 @@ Each kit carries its own tuned parameter set, and these values are the **effecti
 | `--trim_len` | 6 | 0 |
 
 The only differences between the two default sets are a relaxed error threshold (`--err`) and a 6 bp trim for barcode recognition when 3' end sequencing is incomplete (`--trim_len`). Note that `--help` always shows the standalone defaults; they are not the effective values under `-k`.
+
+## How Demultiplexing Works
+Citrus uses a **seed-and-extend** strategy: fast k-mer matching first narrows down where a barcode can be, then a Levenshtein-distance (LD) alignment verifies the exact position. Barcodes therefore do not have to match the read perfectly — sequencing errors and small indels are tolerated within the `--err` threshold.
+
+A read is written to a barcode's output after the barcode bases at both ends are trimmed:
+
+```
+5' ATGC ... insert ... TACC 3'   →   insert
+   └ barcode ┘            └ 3' barcode, reverse-complemented ┘
+```
+
+1. **Seed index** — every 5' barcode is split into overlapping k-mers of `--seed_size` bases (step `--step_size`) and stored in a hash table mapping each k-mer to the barcodes containing it. The index is built once and shared by all worker threads.
+2. **Seed matching and clustering** — the first `--shift` bases at the 5' end are scanned with the same k-mer window. Match positions are collected per barcode and clustered; the barcode(s) with the most matches in one dense cluster become candidates, and isolated hits from repeats or chance similarity are dropped.
+3. **Edit-distance verification** — a semi-global Levenshtein alignment between each candidate barcode and a small window around its seed cluster returns the exact edit distance and the barcode end coordinate. A candidate passes when the distance is within `--err`, given either as an absolute LD or as a fraction of the barcode length.
+4. **3' end** — the last `--shift` bases are matched the same way; the 3' barcode appears there reverse-complemented. In `--mode 2` both ends must match. In `--mode 1` the read is classified by its 5' barcode alone when no 3' barcode is found, and both ends are trimmed when it is.
+5. **Trimming and output** — the matched barcode bases are trimmed (unless `--retain`) and the insert is written to the barcode's output. Reads rejected at any step go to the corresponding file under `Discarded/`.
+
+Because the edit-distance step only runs on a small window around a seed cluster, the alignment work per read is bounded by `--shift` and does not grow with read length. When `-F/--filter_chimeric` is enabled, Citrus also scans the remaining insert after the 5' barcode is trimmed; a second dense barcode-seed region flags the read as chimeric.
 
 ## Output
 ```
