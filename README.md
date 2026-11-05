@@ -1,5 +1,8 @@
 ![image](images/logo.png)
 # Citrus
+
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 This tool is designed to efficiently demultiplex barcodes from sequencing data. It streamlines the preprocessing of genomic data by demultiplexing barcodes, enhancing the accuracy of downstream analyses.
 
 ## No Installation Required  
