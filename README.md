@@ -365,6 +365,9 @@ Two details of the `--mode 1` fallback:
 # every FASTQ in the directory
 citrus -m 1 -f /data/run1/*.fq.gz -b barcodes.txt -o out -n sample
 
+# numbered files, expanded in index order (bash brace expansion)
+citrus -m 1 -f /data/run1/sample_{1..10}.fq.gz -b barcodes.txt -o out -n sample
+
 # a chosen subset
 citrus -m 1 -f /data/run1/A.fq.gz /data/run1/B.fq.gz -b barcodes.txt -o out -n sample
 
@@ -383,6 +386,18 @@ Things to keep in mind:
 - **`xargs` may split a long list into several Citrus runs.** Each of them writes to the same output directory, so give every run its own `-n` sample name, or add `--append` so that the runs accumulate instead of overwriting each other.
 - **The files are read in the order given** and concatenated into a single read stream. The output is per barcode, so the order only affects the order of the reads inside each output file.
 - `--fastq` and `--bam` are mutually exclusive; use two separate invocations if you have both.
+
+**Numbered file sets.** Under bash, `{1..10}` is expanded into ten separate arguments before the wildcard is resolved, so `sample_{1..10}.fq.gz` becomes `sample_1.fq.gz` … `sample_10.fq.gz`. Two consequences are worth knowing:
+
+- The files are read in **index order** (1, 2, …, 10). A plain `*` glob orders them lexicographically instead, which puts `sample_10` right after `sample_1`. The order only affects the order of the reads inside each output file, since the output is split per barcode.
+- A file that does not exist leaves its own name in the argument list, and Citrus then tries to open that name: the run aborts if it is the first file, and otherwise it is reported as a warning and skipped. Drop the holes beforehand if that matters:
+
+  ```bash
+  files=(); for i in {1..10}; do f=/data/run1/sample_${i}.fq.gz; [ -f "$f" ] && files+=("$f"); done
+  citrus -m 1 -f "${files[@]}" -b barcodes.txt -o out -n sample
+  ```
+
+Brace expansion is a bash/zsh feature — POSIX `sh` (dash) does not support it and hands the pattern to Citrus unchanged.
 
 ### 3. Why are some reads still filtered for length and quality when I re-run with `--min_len 100 --min_qual 7`?
 
