@@ -375,7 +375,7 @@ citrus -m 1 -f /data/run1/A.fq.gz /data/run1/B.fq.gz -b barcodes.txt -o out -n s
 citrus -m 1 --bam /data/run1/*.bam -b barcodes.txt -o out -n sample
 
 # recursively, including sub-directories (sort -z keeps a deterministic order)
-find /data -name '*.fq.gz' -print0 | sort -z | xargs -0 citrus -m 1 -b barcodes.txt -o out -n sample -f
+find /data -name '*.fq.gz' -print0 | sort -z | xargs -0 citrus -m 1 -b barcodes.txt -o out -n sample -a -f
 ```
 
 Things to keep in mind:
@@ -383,7 +383,7 @@ Things to keep in mind:
 - **Do not quote the pattern.** A quoted `"*.fq.gz"` is handed to Citrus literally and fails with `No such file or directory`. The same happens when the pattern matches nothing at all — check with `ls` first.
 - **The first file must be readable.** If it cannot be opened, the run aborts. A file that cannot be opened later in the list is reported as a warning and skipped, so the run continues with the remaining files — watch the log for `Warning: failed to open ...`.
 - **Do not pass a directory.** Citrus expects a file; a directory makes the run fail.
-- **`xargs` may split a long list into several Citrus runs.** It is serial by default, so the runs do not overlap — but each run writes to the same output directory and replaces what the previous one wrote, so only the last batch survives. Add `--append` to accumulate instead. Appending requires every run to use the same barcode set and the same `--shift` thresholds, otherwise Citrus prints an error and exits. Do **not** add `-P` (parallel): several Citrus processes writing the same output directory corrupt the output FASTQ/BAM files and the `.summary.bincode` file.
+- **`xargs` may split a long list into several Citrus runs.** It is serial by default, so the runs do not overlap — but each run writes to the same output directory and replaces what the previous one wrote, so only the last batch survives. The example above therefore passes `--append`, which makes the batches accumulate instead; note that re-running the same command into the same directory appends a second time. Appending requires every run to use the same barcode set and the same `--shift` thresholds, otherwise Citrus prints an error and exits. Do **not** add `-P` (parallel): several Citrus processes writing the same output directory corrupt the output FASTQ/BAM files and the `.summary.bincode` file.
 - **The files are read in the order given** and concatenated into a single read stream. `find` returns files in directory order rather than sorted, so pipe it through `sort -z` (or `sort -zV` for natural order, `sample_2` before `sample_10`) when a deterministic order matters. Note that with more than one thread the reads are written by parallel workers, so the order inside an output file is not the input order anyway.
 - `--fastq` and `--bam` are mutually exclusive; use two separate invocations if you have both.
 
