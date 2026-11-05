@@ -337,6 +337,86 @@ The same 10 million reads were demultiplexed with 4, 8, 16 and 32 threads.
 
 CPU utilization grows non-linearly with the number of threads requested. Beyond 16 threads it no longer improves effectively: the fastq run even gets slower (455 s vs 411 s at 16 threads), while the modBAM run only gains 4 s.
 
+## FAQ
+
+### 1. What is the difference between `--mode 1` and `--mode 2`?
+
+Both modes locate the 5' barcode in exactly the same way, and they agree on every read whose 3' barcode is found. They differ only in what happens when **no 3' barcode is found**.
+
+| | `--mode 1` | `--mode 2` |
+|---|---|---|
+| 5' barcode | required | required |
+| 3' barcode | optional | required |
+| Read with no matching 3' barcode | classified by its 5' barcode alone | discarded as LD-filtered |
+| Trimming | both ends trimmed when the 3' barcode is found, otherwise only the 5' end | both ends always trimmed |
+
+Two details of the `--mode 1` fallback:
+
+- It applies only when the 5' assignment is unambiguous, i.e. exactly one barcode has the smallest edit distance. If several barcodes tie, the read is discarded as LD-filtered, exactly as in `--mode 2`. This is why the "list every combination" barcode layout described in [Barcode File](#barcode-file) does not work with `--mode 1`: the same 5' adapter is shared by many IDs, so the 5' assignment is never unique.
+- When a read is classified by its 5' barcode alone, its 3' end is **not** trimmed. The output read therefore still carries whatever was sequenced at that end.
+
+**Which one to use:** use `--mode 2` when both ends are guaranteed to be present (dual-index libraries, both-end barcode kits). Use `--mode 1` when the 3' end is often missing, truncated, or unreliable. `--mode 1` demultiplexes every read that `--mode 2` demultiplexes, plus the reads that carry only a usable 5' barcode, so it is the safer choice when in doubt — but the extra reads are accepted on the strength of the 5' barcode alone.
+
+### 2. How do I pass all (or some) of the FASTQ/BAM files in a directory?
+
+`--fastq` and `--bam` take one or more explicit file paths, separated by spaces. Citrus neither walks directories nor expands wildcards itself — the shell does the expansion, so use a plain shell glob:
+
+```bash
+# every FASTQ in the directory
+citrus -m 1 -f /data/run1/*.fq.gz -b barcodes.txt -o out -n sample
+
+# a chosen subset
+citrus -m 1 -f /data/run1/A.fq.gz /data/run1/B.fq.gz -b barcodes.txt -o out -n sample
+
+# every BAM in the directory
+citrus -m 1 --bam /data/run1/*.bam -b barcodes.txt -o out -n sample
+
+# recursively, including sub-directories
+find /data -name '*.fq.gz' -print0 | xargs -0 citrus -m 1 -b barcodes.txt -o out -n sample -f
+```
+
+Things to keep in mind:
+
+- **Do not quote the pattern.** A quoted `"*.fq.gz"` is handed to Citrus literally and fails with `No such file or directory`. The same happens when the pattern matches nothing at all — check with `ls` first.
+- **The first file must be readable.** If it cannot be opened, the run aborts. A file that cannot be opened later in the list is reported as a warning and skipped, so the run continues with the remaining files — watch the log for `Warning: failed to open ...`.
+- **Do not pass a directory.** Citrus expects a file; a directory makes the run fail.
+- **`xargs` may split a long list into several Citrus runs.** Each of them writes to the same output directory, so give every run its own `-n` sample name, or add `--append` so that the runs accumulate instead of overwriting each other.
+- **The files are read in the order given** and concatenated into a single read stream. The output is per barcode, so the order only affects the order of the reads inside each output file.
+- `--fastq` and `--bam` are mutually exclusive; use two separate invocations if you have both.
+
+### 3. Why are some reads still filtered for length and quality when I re-run with `--min_len 100 --min_qual 7`?
+
+Because both thresholds are evaluated **on the read as it enters the current run**; they are not carried over from the run that produced the input. Two separate effects are at work.
+
+**Length — the input has already been trimmed.** By default Citrus trims the matched barcode off the output reads (`--retain` keeps it). A 132 bp read carrying a 16 bp 5' barcode and a 16 bp 3' barcode becomes a 100 bp output read, and a 100 bp read becomes 68 bp. `--min_len` in the second run is therefore compared against the trimmed length, which is shorter than the length that passed the first filter — effectively the second run applies `original_length - trimmed_barcode_length >= min_len`.
+
+Consequently, in normal mode the reads that fall below `--min_len` are skipped while the input is read. They are **not written to any file** — not even `Discarded/{sample}.length_filtered.fq.gz` — and they are **not counted** in the statistics, so the `Total` row of `{sample}_demux.stats.txt` comes out smaller than the number of records in the input file. (Accuracy mode, `--testseq`, has no read-time pre-filter; there, short reads are written to `Discarded/{sample}.length_filtered.fq.gz` instead.)
+
+To keep two runs comparable, run the first one with `--retain`, or lower `--min_len` in the second run by the number of bases that were trimmed.
+
+**Quality — the read quality is recomputed on the trimmed read.** Citrus derives the read quality from the base qualities in the QUAL string, not from the read ID:
+
+```
+read_q = -10 · log10( mean( 10^(-Q_i / 10) ) )
+```
+
+That is the whole-read **mean error probability** converted back to a Phred score. The first run computes it over the raw read, barcode bases included; the second run computes it over the trimmed read only. Since the average is taken in error-probability space, dropping the barcode bases moves the value, and a read that was just above the threshold in the first run (7.4, say) can fall below it in the second (6.7) and land in `Discarded/{sample}.qval_filtered.fq.gz`.
+
+Note also that this metric is not the qscore carried in the read ID. The basecaller's qscore follows its own convention — PacBio's Genomic mode, for example, averages the error rate over the read excluding the first and last 40 bp, and the value is not quantised to integer Phred scores — whereas Citrus recomputes it from the integer QUAL string (capped at Q40). On short reads the two can differ by roughly ±0.5–1 Q, so a read whose ID shows `qscore 8` can still be quality-filtered with `--min_qual 7`. The same applies when the earlier filter was applied by another tool that judged quality on the read-ID qscore rather than on the base qualities.
+
+**`{sample}.length_filtered.fq.gz` is not the `--min_len` bucket.** Since v3.3.0 it holds only the reads that *passed* `--min_len` and were dropped for another length reason: shorter than the longest barcode in the pool, or nothing left after the barcode was trimmed. It is also the only place where a `--min_len` rejection shows up in accuracy mode.
+
+**Quick diagnosis of a read that went missing:**
+
+| Where the read is | What filtered it |
+|---|---|
+| in no file at all, and the `Total` count is short | `--min_len`, applied while reading (normal mode) |
+| `Discarded/{sample}.length_filtered.fq.gz` | passed `--min_len`, dropped for another length reason |
+| `Discarded/{sample}.qval_filtered.fq.gz` | read quality below `--min_qual` |
+| `Discarded/{sample}.ld_filtered.fq.gz` | no barcode matched within `--err` |
+
+> **Note.** Because the barcode is trimmed off the output reads by default, a Citrus output file cannot be demultiplexed a second time: the reads are discarded as LD-filtered, since the barcode is no longer part of them. Run the first pass with `--retain` if you intend to run Citrus over its output again.
+
 ## Authors
 
 Ming Lian 连明 (lianming@genomics.cn)
