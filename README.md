@@ -389,7 +389,7 @@ Things to keep in mind:
 
 **Numbered file sets.** Under bash, `{1..10}` is expanded into ten separate arguments before the wildcard is resolved, so `sample_{1..10}.fq.gz` becomes `sample_1.fq.gz` … `sample_10.fq.gz`. Two consequences are worth knowing:
 
-- The files are read in **index order** (1, 2, …, 10). A plain `*` glob orders them lexicographically instead, which puts `sample_10` right after `sample_1`. The order only affects the order of the reads inside each output file, since the output is split per barcode.
+- The files are read in **index order** (1, 2, …, 10). A plain `*` glob orders them lexicographically instead, which puts `sample_10` right after `sample_1`. The order does not change the result; it only decides the order in which reads enter the pipeline.
 - A file that does not exist leaves its own name in the argument list, and Citrus then tries to open that name: the run aborts if it is the first file, and otherwise it is reported as a warning and skipped. Drop the holes beforehand if that matters:
 
   ```bash
