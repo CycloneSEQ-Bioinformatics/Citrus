@@ -399,15 +399,15 @@ Things to keep in mind:
 
 Brace expansion is a bash/zsh feature — POSIX `sh` (dash) does not support it and hands the pattern to Citrus unchanged.
 
-### 3. Why are some reads still filtered for length and quality when the input was already filtered with `--min_len 100 --min_qual 7`?
+### 3. Why are some reads still filtered for length and quality when the input had already passed length and quality filters?
 
-Because both thresholds are evaluated **on each read exactly as it arrives in the current input**. An earlier filter with the same thresholds does not make them no-ops, because what the earlier filter measured and what this run measures are not the same sequence. Two separate effects are at work.
+Because both thresholds are evaluated **on each read exactly as it arrives in the current input**. The earlier filter does not make them no-ops, because what the earlier filter measured and what this run measures are not the same sequence. Two separate effects are at work.
 
-**Length — the input reads have already been trimmed.** If the input was produced by an earlier Citrus demultiplexing run, the matched barcode was trimmed off the output reads by default (`--retain` keeps it). A 132 bp read carrying a 16 bp 5' barcode and a 16 bp 3' barcode became a 100 bp output read, and a 100 bp read became 68 bp. `--min_len` now sees the trimmed length, while the earlier filter passed the read on its original length — effectively this run applies `original_length - trimmed_barcode_length >= min_len`.
+**Length — the input has been trimmed since it was filtered.** If the reads passed the earlier length filter before the barcodes or adapters were removed from them, the input can contain reads shorter than that threshold. For example, an earlier Citrus demultiplexing run trims the matched barcode off its output reads by default (`--retain` keeps it): a 132 bp read carrying a 16 bp 5' barcode and a 16 bp 3' barcode became a 100 bp output read, and a 100 bp read became 68 bp, both having passed the filter on their original length. `--min_len` now sees the trimmed length — effectively this run applies `original_length - trimmed_barcode_length >= min_len`.
 
 Consequently, in normal mode the reads that fall below `--min_len` are skipped while the input is read. They are **not written to any file** — not even `Discarded/{sample}.length_filtered.fq.gz` — and they are **not counted** in the statistics, so the `Total` row of `{sample}_demux.stats.txt` comes out smaller than the number of records in the input file. (Accuracy mode, `--testseq`, has no read-time pre-filter; there, short reads are written to `Discarded/{sample}.length_filtered.fq.gz` instead.)
 
-To keep the read set unchanged between the two passes, produce the input with `--retain`, or lower `--min_len` by the number of bases trimmed from the input reads.
+To keep the read set unchanged between the two passes, keep the untrimmed reads in the input (a Citrus run does that with `--retain`), or lower `--min_len` by the number of bases trimmed from the input reads.
 
 **Quality — the read quality is recomputed over the sequence that is left.** Citrus derives the read quality from the base qualities in the QUAL string, not from the read ID:
 
