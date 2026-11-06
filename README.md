@@ -441,6 +441,29 @@ If the input came from an earlier Citrus run, there is one more difference: that
 
 > **Note.** Because the barcode is trimmed off the output reads by default, a Citrus output file cannot be demultiplexed again with the same barcodes: the reads are discarded as LD-filtered, since the barcode is no longer part of them. Produce the input with `--retain` if you intend to run Citrus over it again.
 
+### 4. Why is the total output smaller than the input, even when the discarded reads are counted?
+
+Three independent effects can shrink the output. Only the first one is normally significant.
+
+**1. The barcodes are trimmed off the demultiplexed reads.** By default the barcode bases are cut from both ends of every successfully classified read, so both the sequence and the quality string written to the barcode's file are shorter than the input. The reads under `Discarded/` are written **untrimmed**, so they do not contribute. The net loss is therefore exactly the number of barcode bases trimmed from the classified reads: two barcodes per read in `--mode 2`, one in the `--mode 1` fallback. With `--retain` this effect disappears — the output then holds the input reads verbatim.
+
+**2. Reads shorter than `--min_len` are never written.** Since v3.3.0 the normal mode skips them while the input is read, so they reach no file at all and are missing from the statistics as well. Nothing is lost this way with the default `--min_len 0`; as soon as a threshold is set, the reads below it disappear from the output entirely. Accuracy mode (`--testseq`) has no read-time pre-filter, so there those reads land in `length_filtered` instead.
+
+**3. The output is compressed again.** Each barcode file is its own gzip stream, written by a different compressor with a different level and block layout than the input file, so the same bytes can compress to a slightly different size. This affects the file size only: decompress the output and compare it with the input and there is no difference beyond the trimming above. For BAM input the comparison is less meaningful still, because the output is re-encoded and the container overhead of the two files does not have to match.
+
+The **statistics do not lose anything to the trimming**: the `Total` row of `{sample}_demux.stats.txt` counts the *original* read lengths, so the trimmed barcode bases are still included there. The base count that actually survives the demultiplexing is the `Passed_base_count` column of `{sample}_barcodes.stats.tsv`, and per barcode it is the `PassBaseNum` column of `{sample}_{barcode_id}_01.fastq.stats.tsv`, next to the untrimmed `TotalBaseNum`.
+
+A worked example — 1000 reads of 127,200 bases with a 16 bp barcode at each end:
+
+| Run | Reads written | Bases written | Output size (gzip) |
+|---|---|---|---|
+| Input | 1000 | 127,200 | 121,780 B |
+| `--mode 2` (default) | 1000 | 101,588 | 105,734 B |
+| `--mode 2 --retain` | 1000 | 127,200 | 123,492 B |
+| `--mode 2 --min_len 120` | 800 | 79,988 | 83,356 B |
+
+The default run keeps every read and loses the 25,612 trimmed barcode bases. `--retain` brings them back: decompressed and compared read by read, the output is identical to the input. `--min_len 120` drops the 200 reads below 120 bp, which are then missing from both the files and the statistics.
+
 ## Authors
 
 Ming Lian 连明 (lianming@genomics.cn)
