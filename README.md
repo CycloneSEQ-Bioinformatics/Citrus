@@ -237,8 +237,9 @@ A per-barcode TSV table: one header line, then one row per classified barcode. T
 | `Passed_base_count` | total bases of the retained sequence after trimming |
 | `Read_N50` | N50 computed from the post-trim read length distribution |
 | `Read_mean_Q` | mean read Q of the barcode, taken from the Q value carried in each read ID and averaged in error-rate space, weighted by the reads' base counts (two decimals). Reads whose ID carries no parseable Q are excluded; the value is `0.00` when none of the barcode's reads carries a Q |
+| `Read_mode_Q` | modal read Q of the barcode, taken from the Q value carried in each read ID and reported as the Q of the midpoint of the most populated accuracy bucket (two decimals). Reads whose ID carries no parseable Q are excluded; the value is `0.00` when none of the barcode's reads carries a Q. This is the same value as `reads_q_val` in the cumulative JSON |
 
-**Accuracy mode (`-q`) appends 8 columns after the above 6:**
+**Accuracy mode (`-q`) appends 8 columns after the above 7:**
 
 | Column | Meaning |
 |--------|---------|
@@ -293,7 +294,7 @@ Each entry in `run_barcode_cumulatvie_info` describes one barcode:
 | `reads` / `bases` | read and base counts of this barcode |
 | `reads_rate` / `bases_rate` | share of the classified reads / bases held by this barcode |
 | `split_rate` | reserved field, currently always `0.0` |
-| `reads_q_val` | modal read Q of this barcode |
+| `reads_q_val` | modal read Q of this barcode (same value as the `Read_mode_Q` column of `_barcodes.stats.tsv`) |
 | `total_reads_base` | bases left after barcode trimming |
 | `N50` | N50 of the post-trim read length distribution |
 | `q_bins` / `q_counts` | read quality histogram: the bin edges (80.0 to 100.0 in steps of 0.1) and the number of reads in each bin |

@@ -252,8 +252,9 @@ TotalReadNum	TotalBaseNum	PassBaseNum
 | `Passed_base_count` | 切除后保留序列的碱基总数 |
 | `Read_N50` | 按切除后 read 长度分布计算的 N50 |
 | `Read_mean_Q` | 该 barcode 的平均 read Q，取自每条 read ID 中的 Q 值，在错误率空间按 read 碱基数加权平均（保留两位小数）。ID 中无法解析出 Q 的 read 会被排除；若该 barcode 下的所有 read 都不带 Q，值为 `0.00` |
+| `Read_mode_Q` | 该 barcode 的众数 read Q，取自每条 read ID 中的 Q 值：先换算成准确率并按 0.1 宽的准确率箱计数，再取 read 条数最多的箱、用箱中点反算成 Q（保留两位小数）。ID 中无法解析出 Q 的 read 会被排除；若该 barcode 下的所有 read 都不带 Q，值为 `0.00`。与 JSON 里的 `reads_q_val` 是同一个值 |
 
-**准确度模式（`-q`）在上述 6 列之后追加 8 列：**
+**准确度模式（`-q`）在上述 7 列之后追加 8 列：**
 
 | 列 | 含义 |
 |--------|---------|
@@ -308,7 +309,7 @@ TotalReadNum	TotalBaseNum	PassBaseNum
 | `reads` / `bases` | 该 barcode 的 read 数和碱基数 |
 | `reads_rate` / `bases_rate` | 该 barcode 占已分类 read / 碱基的比例 |
 | `split_rate` | 保留字段，目前恒为 `0.0` |
-| `reads_q_val` | 该 barcode 的众数 read Q |
+| `reads_q_val` | 该 barcode 的众数 read Q（与 `_barcodes.stats.tsv` 的 `Read_mode_Q` 列是同一个值） |
 | `total_reads_base` | 切除 barcode 后剩余的碱基数 |
 | `N50` | 切除后 read 长度分布的 N50 |
 | `q_bins` / `q_counts` | read 质量直方图：分箱边界（80.0 到 100.0，步长 0.1）及各分箱内的 read 数 |
