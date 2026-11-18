@@ -446,6 +446,8 @@ basecaller 写入 read ID 的 qscore 口径在版本间发生过变化：
 
 回退到 QUAL 时，这个值是对不同碱基集合求的平均值；此外 Citrus 基于整数 QUAL（上限 Q40）计算，而 basecaller 使用其内部值。在短 read 上，或中间段质量较低的 read 上，两者可能相差约 ±0.5–1 Q，因此 ID 中显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤——但仅限 ID 中没有可解析 Q 的情况。统计直接使用这个回退值而不是重新计算，因此 `Read_mean_Q`/`Read_mode_Q` 与过滤判定始终一致。
 
+**版本变化（v3.4.8.0）**：v3.4.8.0 之前，`--min_qual` 总是由 QUAL 重新计算 read Q、忽略 read ID 中的 qscore，因此 ID 显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤；同一时期 `Read_mean_Q`/`Read_mode_Q` 只使用 ID qscore，无 ID Q 的 read 会被排除，过滤与统计口径不一致。v3.4.8.0 修复了这一问题：两者统一使用同一个 read Q——优先取 ID qscore，ID 无 Q 时共用 QUAL 回退值。
+
 如果输入来自之前的一次 Citrus 运行，还有一点不同：那次运行的 `--min_qual` 检查看到的是未切除的 read，而本次运行看到的是已经切除的 read。使用 ID Q 时这一点没有影响，因为 qscore 描述的是原始全长 read；走 QUAL 回退时，去掉 barcode 碱基可能让原本卡在阈值边缘的 read 跨过阈值（我们的测试中为 7.44 → 6.69）。
 
 **快速定位一条消失的 read：**

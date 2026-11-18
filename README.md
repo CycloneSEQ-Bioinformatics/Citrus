@@ -431,6 +431,8 @@ The basecaller qscore convention has changed between versions:
 
 When Citrus falls back to QUAL, the value is an average over different bases, and Citrus works from integer QUAL (capped at Q40) while the basecaller uses its internal values. On short reads, or reads whose middle section is low quality, the two can differ by roughly ±0.5–1 Q, so a read whose ID shows `qscore 8` can still be filtered with `--min_qual 7` — but only when its ID has no parseable Q. The statistics consume this same fallback value rather than recomputing it, so `Read_mean_Q`/`Read_mode_Q` always agree with the value the filter compared.
 
+**Version note (v3.4.8.0).** Before v3.4.8.0, `--min_qual` always recomputed the read Q from QUAL and ignored the qscore in the read ID, so a read whose ID showed `qscore 8` could still be filtered with `--min_qual 7`. The `Read_mean_Q`/`Read_mode_Q` statistics at the time used only the ID qscore and skipped reads without one, so the filter and the statistics disagreed. This was fixed in v3.4.8.0: both now use the same read Q — the ID qscore when parseable, otherwise the shared QUAL fallback.
+
 If the input came from an earlier Citrus run, there is one more difference: that run's `--min_qual` check saw the untrimmed read, while this run sees the already-trimmed read. With an ID Q this does not matter, because the ID qscore still describes the original full read; with the QUAL fallback, dropping the barcode bases can move a borderline read across the threshold (7.44 → 6.69 in our tests).
 
 **Quick diagnosis of a read that went missing:**
