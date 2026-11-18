@@ -53,7 +53,7 @@ citrus -m 2 -f sample.fq.gz -k CycloneSEQ_24_Barcode_Library_Prep_Set -o output_
 | `-o, --outdir` | Output directory | Yes | - |
 | `-q, --testseq` | Input a test sequence file | No | - |
 | `-L, --min_len` | Sequences shorter than the minimum length are discarded while reading input: not written to any file and not counted in the statistics. Before v3.3.0 such reads were written to `{sample}.length_filtered.fq.gz` | No | 0 |
-| `-Q, --min_qual` | Reads whose quality computed from the base qualities (`-10·log10(mean(10^(-Q_i/10)))`, not the read-ID qscore) is lower than the minimum are discarded | No | 7.0 |
+| `-Q, --min_qual` | Reads whose Q (taken from the read ID when parseable, otherwise computed from the base qualities as `-10·log10(mean(10^(-Q_i/10)))`) is lower than the minimum are discarded | No | 7.0 |
 | `-e, --err` | Threshold of Levenshtein Distance value (integer) or sequencing error rate (float value between 0 and 1). Use a comma to separate two numbers, when there are different thresholds for the 5' and 3' ends | No | 0.2,0.2 |
 | `-s, --shift` | Threshold of shift length for identifying barcode sequences. Use a comma to separate two numbers, when there are different thresholds for the 5' and 3' ends | No | 150,100 |
 | `-u, --trim_len` | Set trimmed length for barcode recognition when 3' end sequencing is incomplete | No | 0 |
@@ -202,7 +202,7 @@ The four files under `Discarded/` collect the reads that did not reach a barcode
 | File | Reads it contains |
 |---|---|
 | `{sample}.length_filtered.fq.gz` | passes `--min_len` but is discarded for another length reason (shorter than the longest barcode, or no insert left after trimming); since v3.3.0 it no longer contains reads shorter than `--min_len` |
-| `{sample}.qval_filtered.fq.gz` | read quality computed from base qualities (average error probability converted back to Q, not the read-ID qscore) lower than `--min_qual` |
+| `{sample}.qval_filtered.fq.gz` | read Q lower than `--min_qual` (taken from the read ID when parseable, otherwise computed from the base qualities) |
 | `{sample}.ld_filtered.fq.gz` | no barcode matched within the `--err` threshold |
 | `{sample}.chimeric.fq.gz` | reads detected as chimeric; this category is only detected when `-F` is used, and the file stays empty otherwise |
 
@@ -405,7 +405,7 @@ Brace expansion is a bash/zsh feature — POSIX `sh` (dash) does not support it 
 
 ### 3. Why are some reads still filtered for length and quality when the input had already passed length and quality filters?
 
-Because neither filter is a single comparison against the threshold, and the Q value used here is not the qscore printed in the read ID.
+Because neither filter is a single comparison against the threshold, and the quality check only uses the read ID's qscore when the ID carries one.
 
 **Length — `--min_len` is not the only length filter.** Two other length reasons put reads into `Discarded/{sample}.length_filtered.fq.gz` even when they are longer than `--min_len`:
 
@@ -416,20 +416,22 @@ Records in this file are written untrimmed (original SEQ/QUAL), so their length 
 
 Reads that are shorter than `--min_len` itself behave differently: since v3.3.0, in normal mode they are skipped while the input is read, so they are not written to any file and are not counted in the statistics (the `Total` row of `{sample}_demux.stats.txt` can therefore be smaller than the number of input records). Accuracy mode (`--testseq`) has no read-time pre-filter; there they do land in `length_filtered`. One more subtlety when the input came from an earlier Citrus run: that run's `--min_len` check saw the untrimmed read, while its output is trimmed, so a 132 bp read carrying two 16 bp barcodes passed the earlier check as 132 bp but enters this run as 100 bp (and a 100 bp read enters as 68 bp).
 
-**Quality — the read Q is computed from the base qualities, not read from the read ID.** Citrus uses the integer QUAL string:
+**Quality — the read Q is taken from the read ID when it carries one.** Citrus uses the qscore appended to the read ID (e.g. the trailing `13.56` in `@..._13.56`) as the read Q for `--min_qual`; this is the same value that feeds `Read_mean_Q` / `Read_mode_Q`. When the ID has no parseable Q — typical for BAM qnames written by some pipelines — Citrus falls back to the integer QUAL string:
 
 ```
 read_q = -10 · log10( mean( 10^(-Q_i / 10) ) )
 ```
 
-over the **whole read** as it arrives. The qscore in the read ID is written by the basecaller and follows a different convention, which has changed between basecaller versions:
+over the **whole read** as it arrives. If QUAL is also missing (`*`), the quality filter is skipped.
+
+The basecaller qscore convention has changed between versions:
 
 - **Older versions** computed it from the first and last chunks of the read, ignoring the middle.
 - **Current versions** ignore the first and last 40 bp for reads of at least 100 bp and use the full read otherwise, applying the same error-probability formula.
 
-The two quantities are therefore averages over different bases, and Citrus additionally works from integer QUAL (capped at Q40) while the basecaller uses its internal values. On short reads, or reads whose middle section is low quality, the two can differ by roughly ±0.5–1 Q, so a read whose ID shows `qscore 8` can still be filtered with `--min_qual 7`. The same applies when the earlier filter was applied by another tool that judged quality on the read-ID qscore rather than on the base qualities.
+When Citrus falls back to QUAL, the value is an average over different bases, and Citrus works from integer QUAL (capped at Q40) while the basecaller uses its internal values. On short reads, or reads whose middle section is low quality, the two can differ by roughly ±0.5–1 Q, so a read whose ID shows `qscore 8` can still be filtered with `--min_qual 7` — but only when its ID has no parseable Q.
 
-If the input came from an earlier Citrus run, there is one more difference: that run's `--min_qual` check ran on the raw read, barcodes included, while this run evaluates the trimmed read; dropping the barcode bases can move a borderline read across the threshold (7.44 → 6.69 in our tests).
+If the input came from an earlier Citrus run, there is one more difference: that run's `--min_qual` check saw the untrimmed read, while this run sees the already-trimmed read. With an ID Q this does not matter, because the ID qscore still describes the original full read; with the QUAL fallback, dropping the barcode bases can move a borderline read across the threshold (7.44 → 6.69 in our tests).
 
 **Quick diagnosis of a read that went missing:**
 
@@ -437,7 +439,7 @@ If the input came from an earlier Citrus run, there is one more difference: that
 |---|---|
 | in no file at all, and the `Total` count is short | `--min_len`, applied while reading (normal mode) |
 | `Discarded/{sample}.length_filtered.fq.gz` | passed `--min_len`, but shorter than `barcode_len_max` or no insert left after trimming |
-| `Discarded/{sample}.qval_filtered.fq.gz` | Citrus-computed read Q below `--min_qual` |
+| `Discarded/{sample}.qval_filtered.fq.gz` | read Q below `--min_qual` (from the read ID, or from QUAL when the ID carries no Q) |
 | `Discarded/{sample}.ld_filtered.fq.gz` | no barcode matched within `--err` |
 
 > **Note.** Because the barcode is trimmed off the output reads by default, a Citrus output file cannot be demultiplexed again with the same barcodes: the reads are discarded as LD-filtered, since the barcode is no longer part of them. Produce the input with `--retain` if you intend to run Citrus over it again.

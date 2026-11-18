@@ -68,7 +68,7 @@ citrus -m 2 -f sample.fq.gz -k CycloneSEQ_24_Barcode_Library_Prep_Set -o output_
 | `-o, --outdir` | 输出目录 | 是 | - |
 | `-q, --testseq` | 输入测试序列文件，用于评估拆分准确度 | 否 | - |
 | `-L, --min_len` | 短于最小长度的序列在读取输入时即被丢弃：不写入任何文件，也不计入统计。v3.3.0 之前，这类 read 会写入 `{sample}.length_filtered.fq.gz` | 否 | 0 |
-| `-Q, --min_qual` | 由碱基质量计算（`-10·log10(mean(10^(-Q_i/10)))`，而非 read ID 中的 qscore）得到的 read 质量低于该阈值时，该 read 会被丢弃 | 否 | 7.0 |
+| `-Q, --min_qual` | read Q（优先取 read ID 尾部 qscore，无法解析时按碱基质量计算 `-10·log10(mean(10^(-Q_i/10)))`）低于该阈值时，该 read 会被丢弃 | 否 | 7.0 |
 | `-e, --err` | Levenshtein 编辑距离阈值：填整数表示绝对距离，填 0 到 1 之间的小数表示测序错误率。当 5' 端和 3' 端使用不同阈值时，用逗号分隔两个数值 | 否 | 0.2,0.2 |
 | `-s, --shift` | 用于识别 barcode 序列的截取长度阈值。当 5' 端和 3' 端使用不同阈值时，用逗号分隔两个数值 | 否 | 150,100 |
 | `-u, --trim_len` | 3' 端测序不完整时，为识别 barcode 而额外裁剪的长度 | 否 | 0 |
@@ -217,7 +217,7 @@ BAM 输入时，拆分输出和丢弃输出使用 `.bam` 扩展名而非 `.fastq
 | 文件 | 收录的 read |
 |---|---|
 | `{sample}.length_filtered.fq.gz` | 通过了 `--min_len`，但因其他长度原因被丢弃（短于最长 barcode，或切除后没有剩余插入片段）；自 v3.3.0 起，该文件不再包含短于 `--min_len` 的 read |
-| `{sample}.qval_filtered.fq.gz` | 由碱基质量计算得到的 read 质量（把平均错误概率换算回 Q，而不是 read ID 中的 qscore）低于 `--min_qual` |
+| `{sample}.qval_filtered.fq.gz` | read Q 低于 `--min_qual`（优先取 read ID 中的 qscore，无法解析时由碱基质量计算） |
 | `{sample}.ld_filtered.fq.gz` | 在 `--err` 阈值内没有匹配到任何 barcode |
 | `{sample}.chimeric.fq.gz` | 被判定为嵌合体的 read；只有使用 `-F` 时才会检出该类别，否则文件为空 |
 
@@ -420,7 +420,7 @@ find /data -name '*.fq.gz' -print0 | sort -z | xargs -0 citrus -m 1 -b barcodes.
 
 ### 3. 为什么输入已经通过长度和质量过滤，仍有一些 read 因长度和质量被过滤？
 
-因为这两个过滤都不是简单地与阈值比一次大小，而且这里用到的 Q 值也不是 read ID 中打印的那个 qscore。
+因为这两个过滤都不是简单地与阈值比一次大小，而且质量检查只在 read ID 带有 qscore 时才直接使用该值。
 
 **长度——`--min_len` 不是唯一的长度过滤。** 另外两种长度原因也会让长度超过 `--min_len` 的 read 进入 `Discarded/{sample}.length_filtered.fq.gz`：
 
@@ -431,20 +431,22 @@ find /data -name '*.fq.gz' -print0 | sort -z | xargs -0 citrus -m 1 -b barcodes.
 
 本身短于 `--min_len` 的 read 走的是另一条路径：自 v3.3.0 起，普通模式在读取输入时就会跳过它们，因此它们不会写入任何文件，也不计入统计（`{sample}_demux.stats.txt` 的 `Total` 行因此可能小于输入记录数）。准确度模式（`--testseq`）没有读取阶段的预过滤；在那里它们会进入 `length_filtered`。如果输入来自之前的一次 Citrus 运行，还有一点需要注意：那次运行的 `--min_len` 检查看到的是未切除的 read，而它的输出是切除后的，因此一条带两个 16 bp barcode 的 132 bp read 在当时以 132 bp 通过了检查，进入本次运行却只有 100 bp（而 100 bp 的 read 进入时只剩 68 bp）。
 
-**质量——read Q 由碱基质量计算，而不是从 read ID 读取。** Citrus 使用整数 QUAL 字符串：
+**质量——read ID 带有 qscore 时优先使用该值。** Citrus 把 read ID 末尾的 qscore（如 `@..._13.56` 中的 `13.56`）作为 `--min_qual` 使用的 read Q，与 `Read_mean_Q`/`Read_mode_Q` 同源。只有当 ID 中无法解析出 Q 时（部分流程产出的 BAM qname 属于这种情况），才回退到整数 QUAL 字符串：
 
 ```
 read_q = -10 · log10( mean( 10^(-Q_i / 10) ) )
 ```
 
-对到达时的**整条 read** 计算。read ID 中的 qscore 由 basecaller 写入，遵循另一套口径，且这套口径在 basecaller 版本间发生过变化：
+对到达时的**整条 read** 计算；QUAL 也缺失（`*`）时跳过质量过滤。
+
+basecaller 写入 read ID 的 qscore 口径在版本间发生过变化：
 
 - **旧版本**基于 read 的首尾 chunk 计算，忽略中间部分。
 - **当前版本**对长度不低于 100 bp 的 read 忽略首尾 40 bp，否则按全长计算，并采用同样的错误概率公式。
 
-因此这两个量是对不同碱基集合求的平均值；此外 Citrus 基于整数 QUAL（上限 Q40）计算，而 basecaller 使用其内部值。在短 read 上，或中间段质量较低的 read 上，两者可能相差约 ±0.5–1 Q，因此 ID 中显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤。如果之前的过滤是由其他工具基于 read ID 的 qscore 而非碱基质量执行的，也存在同样的情况。
+回退到 QUAL 时，这个值是对不同碱基集合求的平均值；此外 Citrus 基于整数 QUAL（上限 Q40）计算，而 basecaller 使用其内部值。在短 read 上，或中间段质量较低的 read 上，两者可能相差约 ±0.5–1 Q，因此 ID 中显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤——但仅限 ID 中没有可解析 Q 的情况。
 
-如果输入来自之前的一次 Citrus 运行，还有一点不同：那次运行的 `--min_qual` 检查针对的是包含 barcode 的原始 read，而本次运行评估的是切除后的 read；去掉 barcode 碱基可能让原本卡在阈值边缘的 read 跨过阈值（我们的测试中为 7.44 → 6.69）。
+如果输入来自之前的一次 Citrus 运行，还有一点不同：那次运行的 `--min_qual` 检查看到的是未切除的 read，而本次运行看到的是已经切除的 read。使用 ID Q 时这一点没有影响，因为 qscore 描述的是原始全长 read；走 QUAL 回退时，去掉 barcode 碱基可能让原本卡在阈值边缘的 read 跨过阈值（我们的测试中为 7.44 → 6.69）。
 
 **快速定位一条消失的 read：**
 
@@ -452,7 +454,7 @@ read_q = -10 · log10( mean( 10^(-Q_i / 10) ) )
 |---|---|
 | 任何文件中都没有，且 `Total` 计数偏少 | `--min_len`，在读取阶段应用（普通模式） |
 | `Discarded/{sample}.length_filtered.fq.gz` | 通过了 `--min_len`，但短于 `barcode_len_max`，或切除后没有剩余插入片段 |
-| `Discarded/{sample}.qval_filtered.fq.gz` | Citrus 计算出的 read Q 低于 `--min_qual` |
+| `Discarded/{sample}.qval_filtered.fq.gz` | read Q 低于 `--min_qual`（优先取 read ID，ID 无 Q 时取 QUAL） |
 | `Discarded/{sample}.ld_filtered.fq.gz` | 在 `--err` 阈值内没有匹配到 barcode |
 
 > **提示。** 默认情况下 barcode 会从输出 read 上切除，因此 Citrus 的输出文件无法再用同一套 barcode 拆分：这些 read 会作为 LD-filtered 被丢弃，因为 barcode 已不在其中。如果打算对输出再次运行 Citrus，请在生成输入时使用 `--retain`。
