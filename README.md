@@ -236,8 +236,8 @@ A per-barcode TSV table: one header line, then one row per classified barcode. T
 | `Base_count` | total bases for this barcode, summed over original read lengths |
 | `Passed_base_count` | total bases of the retained sequence after trimming |
 | `Read_N50` | N50 computed from the post-trim read length distribution |
-| `Read_mean_Q` | mean read Q of the barcode, taken from the Q value carried in each read ID and averaged in error-rate space, weighted by the reads' base counts (two decimals). Reads whose ID carries no parseable Q are excluded; the value is `0.00` when none of the barcode's reads carries a Q |
-| `Read_mode_Q` | modal read Q of the barcode, taken from the Q value carried in each read ID and reported as the Q of the midpoint of the most populated accuracy bucket (two decimals). Reads whose ID carries no parseable Q are excluded; the value is `0.00` when none of the barcode's reads carries a Q. This is the same value as `reads_q_val` in the cumulative JSON |
+| `Read_mean_Q` | mean read Q of the barcode, averaged in error-rate space and weighted by the reads' base counts (two decimals). Each read's Q is the ID qscore when parseable, otherwise the QUAL-derived fallback; reads carrying neither source are excluded, so the value is `0.00` when none of the barcode's reads has a Q. This is the same read Q the `--min_qual` filter compares |
+| `Read_mode_Q` | modal read Q of the barcode, reported as the Q of the midpoint of the most populated accuracy bucket (two decimals). Each read's Q is the ID qscore when parseable, otherwise the QUAL-derived fallback; reads carrying neither source are excluded, so the value is `0.00` when none of the barcode's reads has a Q. This is the same value as `reads_q_val` in the cumulative JSON |
 
 **Accuracy mode (`-q`) appends 8 columns after the above 7:**
 
@@ -416,20 +416,20 @@ Records in this file are written untrimmed (original SEQ/QUAL), so their length 
 
 Reads that are shorter than `--min_len` itself behave differently: since v3.3.0, in normal mode they are skipped while the input is read, so they are not written to any file and are not counted in the statistics (the `Total` row of `{sample}_demux.stats.txt` can therefore be smaller than the number of input records). Accuracy mode (`--testseq`) has no read-time pre-filter; there they do land in `length_filtered`. One more subtlety when the input came from an earlier Citrus run: that run's `--min_len` check saw the untrimmed read, while its output is trimmed, so a 132 bp read carrying two 16 bp barcodes passed the earlier check as 132 bp but enters this run as 100 bp (and a 100 bp read enters as 68 bp).
 
-**Quality — the read Q is taken from the read ID when it carries one.** Citrus uses the qscore appended to the read ID (e.g. the trailing `13.56` in `@..._13.56`) as the read Q for `--min_qual`; this is the same value that feeds `Read_mean_Q` / `Read_mode_Q`. When the ID has no parseable Q — typical for BAM qnames written by some pipelines — Citrus falls back to the integer QUAL string:
+**Quality — the read Q is taken from the read ID when it carries one.** Citrus uses the qscore appended to the read ID (e.g. the trailing `13.56` in `@..._13.56`) as the read Q for `--min_qual`; the same value, computed once per read before trimming, feeds `Read_mean_Q` / `Read_mode_Q`. When the ID has no parseable Q — typical for BAM qnames written by some pipelines — Citrus falls back to the integer QUAL string for both the filter and the statistics:
 
 ```
 read_q = -10 · log10( mean( 10^(-Q_i / 10) ) )
 ```
 
-over the **whole read** as it arrives. If QUAL is also missing (`*`), the quality filter is skipped.
+over the **whole read** as it arrives. If QUAL is also missing (`*`), the quality filter is skipped and the read contributes no Q to the statistics.
 
 The basecaller qscore convention has changed between versions:
 
 - **Older versions** computed it from the first and last chunks of the read, ignoring the middle.
 - **Current versions** ignore the first and last 40 bp for reads of at least 100 bp and use the full read otherwise, applying the same error-probability formula.
 
-When Citrus falls back to QUAL, the value is an average over different bases, and Citrus works from integer QUAL (capped at Q40) while the basecaller uses its internal values. On short reads, or reads whose middle section is low quality, the two can differ by roughly ±0.5–1 Q, so a read whose ID shows `qscore 8` can still be filtered with `--min_qual 7` — but only when its ID has no parseable Q.
+When Citrus falls back to QUAL, the value is an average over different bases, and Citrus works from integer QUAL (capped at Q40) while the basecaller uses its internal values. On short reads, or reads whose middle section is low quality, the two can differ by roughly ±0.5–1 Q, so a read whose ID shows `qscore 8` can still be filtered with `--min_qual 7` — but only when its ID has no parseable Q. The statistics consume this same fallback value rather than recomputing it, so `Read_mean_Q`/`Read_mode_Q` always agree with the value the filter compared.
 
 If the input came from an earlier Citrus run, there is one more difference: that run's `--min_qual` check saw the untrimmed read, while this run sees the already-trimmed read. With an ID Q this does not matter, because the ID qscore still describes the original full read; with the QUAL fallback, dropping the barcode bases can move a borderline read across the threshold (7.44 → 6.69 in our tests).
 

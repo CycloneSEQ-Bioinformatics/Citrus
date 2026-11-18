@@ -251,8 +251,8 @@ TotalReadNum	TotalBaseNum	PassBaseNum
 | `Base_count` | 该 barcode 的碱基总数，按原始 read 长度求和 |
 | `Passed_base_count` | 切除后保留序列的碱基总数 |
 | `Read_N50` | 按切除后 read 长度分布计算的 N50 |
-| `Read_mean_Q` | 该 barcode 的平均 read Q，取自每条 read ID 中的 Q 值，在错误率空间按 read 碱基数加权平均（保留两位小数）。ID 中无法解析出 Q 的 read 会被排除；若该 barcode 下的所有 read 都不带 Q，值为 `0.00` |
-| `Read_mode_Q` | 该 barcode 的众数 read Q，取自每条 read ID 中的 Q 值：先换算成准确率并按 0.1 宽的准确率箱计数，再取 read 条数最多的箱、用箱中点反算成 Q（保留两位小数）。ID 中无法解析出 Q 的 read 会被排除；若该 barcode 下的所有 read 都不带 Q，值为 `0.00`。与 JSON 里的 `reads_q_val` 是同一个值 |
+| `Read_mean_Q` | 该 barcode 的平均 read Q，在错误率空间按 read 碱基数加权平均（保留两位小数）。每条 read 的 Q 优先取 ID 中的 qscore，无法解析时回退到由 QUAL 计算的值；两种来源都没有的 read 会被排除，若该 barcode 下的所有 read 都没有 Q，值为 `0.00`。这与 `--min_qual` 过滤比较的是同一个 read Q |
+| `Read_mode_Q` | 该 barcode 的众数 read Q：先换算成准确率并按 0.1 宽的准确率箱计数，再取 read 条数最多的箱、用箱中点反算成 Q（保留两位小数）。每条 read 的 Q 优先取 ID 中的 qscore，无法解析时回退到由 QUAL 计算的值；两种来源都没有的 read 会被排除，若该 barcode 下的所有 read 都没有 Q，值为 `0.00`。与 JSON 里的 `reads_q_val` 是同一个值 |
 
 **准确度模式（`-q`）在上述 7 列之后追加 8 列：**
 
@@ -431,20 +431,20 @@ find /data -name '*.fq.gz' -print0 | sort -z | xargs -0 citrus -m 1 -b barcodes.
 
 本身短于 `--min_len` 的 read 走的是另一条路径：自 v3.3.0 起，普通模式在读取输入时就会跳过它们，因此它们不会写入任何文件，也不计入统计（`{sample}_demux.stats.txt` 的 `Total` 行因此可能小于输入记录数）。准确度模式（`--testseq`）没有读取阶段的预过滤；在那里它们会进入 `length_filtered`。如果输入来自之前的一次 Citrus 运行，还有一点需要注意：那次运行的 `--min_len` 检查看到的是未切除的 read，而它的输出是切除后的，因此一条带两个 16 bp barcode 的 132 bp read 在当时以 132 bp 通过了检查，进入本次运行却只有 100 bp（而 100 bp 的 read 进入时只剩 68 bp）。
 
-**质量——read ID 带有 qscore 时优先使用该值。** Citrus 把 read ID 末尾的 qscore（如 `@..._13.56` 中的 `13.56`）作为 `--min_qual` 使用的 read Q，与 `Read_mean_Q`/`Read_mode_Q` 同源。只有当 ID 中无法解析出 Q 时（部分流程产出的 BAM qname 属于这种情况），才回退到整数 QUAL 字符串：
+**质量——read ID 带有 qscore 时优先使用该值。** Citrus 把 read ID 末尾的 qscore（如 `@..._13.56` 中的 `13.56`）作为 `--min_qual` 使用的 read Q；同一个值在切除 barcode 之前只计算一次，也供 `Read_mean_Q`/`Read_mode_Q` 统计使用。只有当 ID 中无法解析出 Q 时（部分流程产出的 BAM qname 属于这种情况），才回退到整数 QUAL 字符串，过滤与统计共用该回退值：
 
 ```
 read_q = -10 · log10( mean( 10^(-Q_i / 10) ) )
 ```
 
-对到达时的**整条 read** 计算；QUAL 也缺失（`*`）时跳过质量过滤。
+对到达时的**整条 read** 计算；QUAL 也缺失（`*`）时跳过质量过滤，且该 read 不参与 Q 统计。
 
 basecaller 写入 read ID 的 qscore 口径在版本间发生过变化：
 
 - **旧版本**基于 read 的首尾 chunk 计算，忽略中间部分。
 - **当前版本**对长度不低于 100 bp 的 read 忽略首尾 40 bp，否则按全长计算，并采用同样的错误概率公式。
 
-回退到 QUAL 时，这个值是对不同碱基集合求的平均值；此外 Citrus 基于整数 QUAL（上限 Q40）计算，而 basecaller 使用其内部值。在短 read 上，或中间段质量较低的 read 上，两者可能相差约 ±0.5–1 Q，因此 ID 中显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤——但仅限 ID 中没有可解析 Q 的情况。
+回退到 QUAL 时，这个值是对不同碱基集合求的平均值；此外 Citrus 基于整数 QUAL（上限 Q40）计算，而 basecaller 使用其内部值。在短 read 上，或中间段质量较低的 read 上，两者可能相差约 ±0.5–1 Q，因此 ID 中显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤——但仅限 ID 中没有可解析 Q 的情况。统计直接使用这个回退值而不是重新计算，因此 `Read_mean_Q`/`Read_mode_Q` 与过滤判定始终一致。
 
 如果输入来自之前的一次 Citrus 运行，还有一点不同：那次运行的 `--min_qual` 检查看到的是未切除的 read，而本次运行看到的是已经切除的 read。使用 ID Q 时这一点没有影响，因为 qscore 描述的是原始全长 read；走 QUAL 回退时，去掉 barcode 碱基可能让原本卡在阈值边缘的 read 跨过阈值（我们的测试中为 7.44 → 6.69）。
 
