@@ -146,6 +146,38 @@ Citrus 会识别每个接头对的两种测序方向，因此 `LB1_LB2` 和 `LB2
 >
 > 如果把所有组合都列出来，同一个 5' 接头会在多个 ID 中重复出现，导致一条 read 得到多个同样好的 5' 候选。在 `--mode 1` 下，这会禁用「仅凭 5' 接头分类」的兜底逻辑，3' 接头匹配不上的 read 会作为 LD-filtered 被丢弃。这种排布请使用 `--mode 2`。
 
+**多个 barcode 文件 —— 同一端有两段 barcode。** 如果每条 read 在同一端上有两段首尾相连的 barcode，就为每一段各写一个 barcode 文件，并用逗号分隔两个文件路径：
+
+```bash
+citrus -m 1 -f sample.fq.gz -b outer.txt,inner.txt -o out -n sample
+```
+
+`-b` 只接受 1 个或 2 个文件，3 个及以上会报错。给出两个文件时，Citrus 对两个文件的条目做笛卡尔积——文件 1 的每个 ID 都会与文件 2 的每个 ID 组合。对于每个组合：
+
+- barcode ID 为 `{文件1_ID}_{文件2_ID}`（同一个 ID 占多行时，各组合仍归入同一个输出 ID，对应多组序列变体）；
+- 5' 序列为 `文件1_5' + 文件2_5'`，按文件顺序首尾拼接；
+- 3' 序列为 `文件1_3' + 文件2_3'`。
+
+文件顺序是从 read 末端向内的：文件 1 提供紧贴 5'/3' 末端的那一段，文件 2 提供其内侧的一段。因此输出中一共有 `N1 × N2` 个 barcode ID，分别写入 `{sample}_{文件1_ID}_{文件2_ID}` 目录。
+
+例如，`outer.txt` 为：
+
+```
+A	ATCG
+B	GGTA
+```
+
+`inner.txt` 为：
+
+```
+X	CCTA
+Y	TGCA
+```
+
+则一次运行得到 4 个 barcode：`A_X`（5' 为 `ATCGCCTA`）、`A_Y`（`ATCGTGCA`）、`B_X`（`GGTACCTA`）和 `B_Y`（`GGTATGCA`）。
+
+两个文件都使用上文所述的两列或三列格式。两列格式表示「3' 序列与 5' 序列相同」，因此两个两列文件组合时，合并后的 3' 端也会是 `文件1_5' + 文件2_5'`。如果 read 只有 5' 端有两段 barcode，请使用 `--mode 1`，它可以仅凭 5' barcode 分类；`--mode 2` 要求 3' barcode 也必须匹配，这类 read 会作为 LD-filtered 被丢弃。
+
 ## 预定义 Barcode Kit
 用 `-k` 代替 `-b`，即可直接使用内置的 barcode kit 拆分：
 

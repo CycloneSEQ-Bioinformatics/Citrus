@@ -131,6 +131,38 @@ Citrus recognizes both sequencing orientations of every adapter pair, so `LB1_LB
 >
 > Listing all combinations also repeats each 5' adapter across many IDs, so a read ends up with many equally good 5' candidates. In `--mode 1` this disables the fallback that classifies a read by its 5' adapter alone, and reads whose 3' adapter cannot be matched are discarded as LD-filtered. Use `--mode 2` for this layout.
 
+**Multiple barcode files — two barcode segments on one end.** When each read carries two barcode segments in a row at an end, describe one segment per barcode file and pass both files separated by a comma:
+
+```bash
+citrus -m 1 -f sample.fq.gz -b outer.txt,inner.txt -o out -n sample
+```
+
+`-b` accepts one or two files; three or more is an error. With two files, Citrus takes the Cartesian product of their entries — every ID in the first file is combined with every ID in the second file. For each combination:
+
+- the barcode ID is `{first_id}_{second_id}` (if an ID occupies several lines, its combinations still share one output ID with several sequence variants);
+- the 5' sequence is `first_5p + second_5p`, the two sequences concatenated in file order;
+- the 3' sequence is `first_3p + second_3p`.
+
+File order runs from the read end inward: the first file supplies the segment at the very 5'/3' terminus, the second file the segment immediately inside it. The output therefore has `N1 × N2` barcode IDs, each written to `{sample}_{first_id}_{second_id}`.
+
+For example, with `outer.txt`:
+
+```
+A	ATCG
+B	GGTA
+```
+
+and `inner.txt`:
+
+```
+X	CCTA
+Y	TGCA
+```
+
+the run produces four barcodes: `A_X` (5' = `ATCGCCTA`), `A_Y` (`ATCGTGCA`), `B_X` (`GGTACCTA`) and `B_Y` (`GGTATGCA`).
+
+Both files use the two- or three-column layout described above. A two-column line means "the 3' sequence is the same as the 5' sequence", so combining two two-column files also fills the 3' side with `first_5p + second_5p`. If the reads carry the two segments only at the 5' end, use `--mode 1`, which can classify by the 5' barcode alone; `--mode 2` requires a matching 3' barcode and discards such reads as LD-filtered.
+
 ## Predefined Barcode Kits
 Use `-k` instead of `-b` to demultiplex with a built-in barcode kit:
 
