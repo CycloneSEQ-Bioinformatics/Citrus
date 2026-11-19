@@ -67,7 +67,7 @@ citrus -m 2 -f sample.fq.gz -k CycloneSEQ_24_Barcode_Library_Prep_Set -o output_
 | `-t, --thread` | 线程数 | 否 | 4 |
 | `-o, --outdir` | 输出目录 | 是 | - |
 | `-q, --testseq` | 输入测试序列文件，用于评估拆分准确度 | 否 | - |
-| `-L, --min_len` | 短于最小长度的序列在读取输入时即被丢弃：不写入任何文件，也不计入统计。v3.3.0 之前，这类 read 会写入 `{sample}.length_filtered.fq.gz` | 否 | 0 |
+| `-L, --min_len` | 短于最小长度的序列在读取输入时即被丢弃（普通模式与准确度模式均如此）：不写入任何文件，也不计入统计。v3.3.0 之前，这类 read 会写入 `{sample}.length_filtered.fq.gz` | 否 | 0 |
 | `-Q, --min_qual` | read Q（优先取 read ID 尾部 qscore，无法解析时按碱基质量计算 `-10·log10(mean(10^(-Q_i/10)))`）低于该阈值时，该 read 会被丢弃 | 否 | 7.0 |
 | `-e, --err` | Levenshtein 编辑距离阈值：填整数表示绝对距离，填 0 到 1 之间的小数表示测序错误率。当 5' 端和 3' 端使用不同阈值时，用逗号分隔两个数值 | 否 | 0.2,0.2 |
 | `-s, --shift` | 用于识别 barcode 序列的截取长度阈值。当 5' 端和 3' 端使用不同阈值时，用逗号分隔两个数值 | 否 | 150,100 |
@@ -248,7 +248,7 @@ BAM 输入时，拆分输出和丢弃输出使用 `.bam` 扩展名而非 `.fastq
 
 | 文件 | 收录的 read |
 |---|---|
-| `{sample}.length_filtered.fq.gz` | 通过了 `--min_len`，但因其他长度原因被丢弃（短于最长 barcode，或切除后没有剩余插入片段）；自 v3.3.0 起，该文件不再包含短于 `--min_len` 的 read |
+| `{sample}.length_filtered.fq.gz` | 通过了 `--min_len`，但因其他长度原因被丢弃（短于最长 barcode，或切除后没有剩余插入片段）；短于 `--min_len` 的 read 在读取阶段即被过滤，不会进入该文件（普通模式自 v3.3.0 起，准确度模式自 v3.4.7.0 起） |
 | `{sample}.qval_filtered.fq.gz` | read Q 低于 `--min_qual`（优先取 read ID 中的 qscore，无法解析时由碱基质量计算） |
 | `{sample}.ld_filtered.fq.gz` | 在 `--err` 阈值内没有匹配到任何 barcode |
 | `{sample}.chimeric.fq.gz` | 被判定为嵌合体的 read；只有使用 `-F` 时才会检出该类别，否则文件为空 |
@@ -461,7 +461,7 @@ find /data -name '*.fq.gz' -print0 | sort -z | xargs -0 citrus -m 1 -b barcodes.
 
 该文件中的记录以未切除的形式写出（原始 SEQ/QUAL），因此长度可能超过 `--min_len`——在 "length-filtered" 文件中看到 100 bp 甚至更长的 read 是正常的。
 
-本身短于 `--min_len` 的 read 走的是另一条路径：自 v3.3.0 起，普通模式在读取输入时就会跳过它们，因此它们不会写入任何文件，也不计入统计（`{sample}_demux.stats.txt` 的 `Total` 行因此可能小于输入记录数）。准确度模式（`--testseq`）没有读取阶段的预过滤；在那里它们会进入 `length_filtered`。如果输入来自之前的一次 Citrus 运行，还有一点需要注意：那次运行的 `--min_len` 检查看到的是未切除的 read，而它的输出是切除后的，因此一条带两个 16 bp barcode 的 132 bp read 在当时以 132 bp 通过了检查，进入本次运行却只有 100 bp（而 100 bp 的 read 进入时只剩 68 bp）。
+本身短于 `--min_len` 的 read 走的是另一条路径：普通模式自 v3.3.0 起、准确度模式自 v3.4.7.0 起，在读取输入时就会跳过它们，因此它们不会写入任何文件，也不计入统计（`{sample}_demux.stats.txt` 的 `Total` 行因此可能小于输入记录数）。如果输入来自之前的一次 Citrus 运行，还有一点需要注意：那次运行的 `--min_len` 检查看到的是未切除的 read，而它的输出是切除后的，因此一条带两个 16 bp barcode 的 132 bp read 在当时以 132 bp 通过了检查，进入本次运行却只有 100 bp（而 100 bp 的 read 进入时只剩 68 bp）。
 
 **质量——read ID 带有 qscore 时优先使用该值。** Citrus 把 read ID 末尾的 qscore（如 `@..._13.56` 中的 `13.56`）作为 `--min_qual` 使用的 read Q；同一个值在切除 barcode 之前只计算一次，也供 `Read_mean_Q`/`Read_mode_Q` 统计使用。只有当 ID 中无法解析出 Q 时（部分流程产出的 BAM qname 属于这种情况），才回退到整数 QUAL 字符串，过滤与统计共用该回退值：
 
@@ -478,7 +478,7 @@ basecaller 写入 read ID 的 qscore 口径在版本间发生过变化：
 
 回退到 QUAL 时，这个值是对不同碱基集合求的平均值；此外 Citrus 基于整数 QUAL（上限 Q40）计算，而 basecaller 使用其内部值。在短 read 上，或中间段质量较低的 read 上，两者可能相差约 ±0.5–1 Q，因此 ID 中显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤——但仅限 ID 中没有可解析 Q 的情况。统计直接使用这个回退值而不是重新计算，因此 `Read_mean_Q`/`Read_mode_Q` 与过滤判定始终一致。
 
-**版本变化（v3.4.8.0）**：v3.4.8.0 之前，`--min_qual` 总是由 QUAL 重新计算 read Q、忽略 read ID 中的 qscore，因此 ID 显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤；同一时期 `Read_mean_Q`/`Read_mode_Q` 只使用 ID qscore，无 ID Q 的 read 会被排除，过滤与统计口径不一致。v3.4.8.0 修复了这一问题：两者统一使用同一个 read Q——优先取 ID qscore，ID 无 Q 时共用 QUAL 回退值。
+**版本变化（v3.4.7.0）**：v3.4.7.0 之前，`--min_qual` 总是由 QUAL 重新计算 read Q、忽略 read ID 中的 qscore，因此 ID 显示 `qscore 8` 的 read 仍可能被 `--min_qual 7` 过滤；同一时期 `Read_mean_Q`/`Read_mode_Q` 只使用 ID qscore，无 ID Q 的 read 会被排除，过滤与统计口径不一致。v3.4.7.0 修复了这一问题：两者统一使用同一个 read Q——优先取 ID qscore，ID 无 Q 时共用 QUAL 回退值。
 
 如果输入来自之前的一次 Citrus 运行，还有一点不同：那次运行的 `--min_qual` 检查看到的是未切除的 read，而本次运行看到的是已经切除的 read。使用 ID Q 时这一点没有影响，因为 qscore 描述的是原始全长 read；走 QUAL 回退时，去掉 barcode 碱基可能让原本卡在阈值边缘的 read 跨过阈值（我们的测试中为 7.44 → 6.69）。
 
@@ -486,7 +486,7 @@ basecaller 写入 read ID 的 qscore 口径在版本间发生过变化：
 
 | 这条 read 在哪里 | 被什么过滤了 |
 |---|---|
-| 任何文件中都没有，且 `Total` 计数偏少 | `--min_len`，在读取阶段应用（普通模式） |
+| 任何文件中都没有，且 `Total` 计数偏少 | `--min_len`，在读取阶段应用（两种模式） |
 | `Discarded/{sample}.length_filtered.fq.gz` | 通过了 `--min_len`，但短于 `barcode_len_max`，或切除后没有剩余插入片段 |
 | `Discarded/{sample}.qval_filtered.fq.gz` | read Q 低于 `--min_qual`（优先取 read ID，ID 无 Q 时取 QUAL） |
 | `Discarded/{sample}.ld_filtered.fq.gz` | 在 `--err` 阈值内没有匹配到 barcode |
@@ -499,7 +499,7 @@ basecaller 写入 read ID 的 qscore 口径在版本间发生过变化：
 
 **一、成功拆分的 read 被切掉了 barcode。** 默认情况下，每个成功分类的 read 两端的 barcode 都会被切除，因此写进 barcode 文件的序列和质量值都比输入短。`Discarded/` 下的 read 是**未切除**的原样输出，不参与这项损失。所以净损失恰好等于成功拆分 read 的被切除碱基数：`--mode 2` 下每条 read 切掉两个 barcode，`--mode 1` 兜底时切掉一个。加上 `--retain` 这一项就消失了，输出里保留的是完整的原始 read。
 
-**二、短于 `--min_len` 的 read 根本没有写盘。** 自 v3.3.0 起，普通模式在读取输入时就会跳过它们，这些 read 不写入任何文件，统计里也没有。默认 `--min_len 0` 时不会有损失；一旦设了阈值，短于阈值的 read 就从输出里整体消失。准确度模式（`--testseq`）没有读入阶段的预过滤，在那里它们会进入 `length_filtered`。
+**二、短于 `--min_len` 的 read 根本没有写盘。** 普通模式自 v3.3.0 起、准确度模式（`--testseq`）自 v3.4.7.0 起，在读取输入时就会跳过它们，这些 read 不写入任何文件，统计里也没有。默认 `--min_len 0` 时不会有损失；一旦设了阈值，短于阈值的 read 就从输出里整体消失。
 
 **三、输出被重新压缩了一遍。** 每个 barcode 文件是各自独立的 gzip 流，用的压缩器、压缩级别和分块方式都和输入文件不同，同样的字节压出来可能略有出入。这一项只影响文件体积：把输出解压后和输入逐条比对，除了上面说的切除之外没有别的差别。BAM 输入时这种比较意义更小——输出是重新编码的，两个文件的容器开销本来就不必一致。
 
