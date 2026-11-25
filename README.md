@@ -226,6 +226,8 @@ output/
 
 For BAM input, the demultiplexed and discarded outputs use the `.bam` extension instead of `.fastq.gz`/`.fq.gz`, and the per-barcode statistics file is named `{sample}_{barcode_id}_01.bam.stats.tsv`.
 
+Accuracy mode (`--testseq`) additionally writes `{sample}.distrib_heatmap.html`: an HTML heatmap of the true-vs-observed barcode confusion matrix (see below).
+
 ### Demultiplexed and discarded reads
 `{sample}_{barcode_id}_01.fastq.gz` holds the reads assigned to that barcode, in standard FASTQ format (four lines per read) and gzip-compressed. The barcode sequences are trimmed from the read ends by default; `--retain` keeps them in the output.
 
@@ -304,6 +306,9 @@ A full statistics report in plain text, made of three parts:
 
    Accuracy mode appends `Accuracy(%)` and `Index_hopping_rate(%)` rows.
 3. **Barcode distribution matrix** (accuracy mode only): a confusion matrix with true barcodes as rows and predicted barcodes as columns, showing index hopping flows. Rows and columns follow the same natural barcode-ID order as the per-barcode table.
+
+### `{sample}.distrib_heatmap.html`
+Generated only in accuracy mode (`--testseq`). An HTML heatmap rendered from the same confusion matrix as part 3 above: the y-axis is the expected (true) barcode, the x-axis the observed (classified) barcode, and the color scale covers the off-diagonal counts, i.e. index-hopping flows. Cells with zero reads are labeled `-`. The file is regenerated on every accuracy-mode run; the page loads ECharts from a CDN, so an internet connection is needed to view it. This output was removed in v3.3.1 and restored in v3.4.7.0.
 
 ### `{sample}.barcode_cumulative.json`
 A cumulative JSON summary, **generated only in normal mode** (not in accuracy mode). Top-level fields:

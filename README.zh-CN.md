@@ -241,6 +241,8 @@ output/
 
 BAM 输入时，拆分输出和丢弃输出使用 `.bam` 扩展名而非 `.fastq.gz`/`.fq.gz`，每个 barcode 的统计文件名为 `{sample}_{barcode_id}_01.bam.stats.tsv`。
 
+准确度模式（`--testseq`）还会额外输出 `{sample}.distrib_heatmap.html`：真实 barcode 与观测 barcode 混淆矩阵的 HTML 热图（详见下文）。
+
 ### 拆分结果与被丢弃的 read
 `{sample}_{barcode_id}_01.fastq.gz` 保存分配给该 barcode 的 read，为标准 FASTQ 格式（每条 read 四行），gzip 压缩。默认会从 read 两端切除 barcode 序列；`--retain` 则把它们保留在输出中。
 
@@ -319,6 +321,9 @@ TotalReadNum	TotalBaseNum	PassBaseNum
 
    准确度模式会追加 `Accuracy(%)` 和 `Index_hopping_rate(%)` 两行。
 3. **Barcode 分布矩阵**（仅准确度模式）：以真实 barcode 为行、预测 barcode 为列的混淆矩阵，直观展示 index hopping 的流向。行和列遵循与 barcode 表格相同的自然 ID 顺序。
+
+### `{sample}.distrib_heatmap.html`
+仅在准确度模式（`--testseq`）下生成。该 HTML 热图渲染自上文第 3 部分的同一份混淆矩阵：纵轴为期望（真实）barcode，横轴为观测（分类结果）barcode，颜色刻度覆盖非对角计数，即 index hopping 的流向。计数为 0 的单元格显示为 `-`。每次准确度模式运行都会重新生成该文件；页面通过 CDN 加载 ECharts，查看时需要联网。该输出在 v3.3.1 中被移除，并在 v3.4.7.0 中恢复。
 
 ### `{sample}.barcode_cumulative.json`
 累计 JSON 摘要，**仅在普通模式下生成**（准确度模式不生成）。顶层字段：
